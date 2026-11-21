@@ -627,7 +627,7 @@
 (function () {
   var okLibs = (typeof firebase !== "undefined") && (typeof React !== "undefined") && (typeof ReactDOM !== "undefined") && (typeof XLSX !== "undefined");
   window.__IBASE_LIBS_OK = okLibs;
-  window.__IBASE_BUILD = "v377";
+  window.__IBASE_BUILD = "v378";
   if (!okLibs) {
     document.getElementById("root").innerHTML =
       "<div style='max-width:520px;margin:90px auto;padding:30px;background:#16181d;border:1px solid #f8717155;border-radius:16px;font-family:system-ui,sans-serif;color:#e5e7eb;text-align:center'>" +
@@ -3750,7 +3750,7 @@ function Login({
       letterSpacing: 2,
       textTransform: "uppercase"
     }
-  }, "version: v377"), /*#__PURE__*/React.createElement(React.Fragment, null,
+  }, "version: v378"), /*#__PURE__*/React.createElement(React.Fragment, null,
   /*#__PURE__*/React.createElement("label", {
     style: labelSt
   }, "Email"), /*#__PURE__*/React.createElement("input", {
@@ -10750,14 +10750,15 @@ function AnalyticsTab({
       ...v,
       _lab: l.name,
       _sn: m.serialNo,
-      _instrument: m.instrument
+      _instrument: m.instrument,
+      _labBrand: l.brand || ""
     }))));
     if (__anaRowsCache) __anaRowsCache.set(labs, rows0);
     return rows0;
   }, [labs]);
   const rows = useMemo(() => baseRows.filter(v => {
     if (instrument !== "All" && String(v._instrument || "").trim() !== instrument) return false;
-    if (brand !== "All" && !String(v._instrument || "").toLowerCase().startsWith(String(brand).toLowerCase())) return false;
+    if (brand !== "All" && brandFromModel(v._instrument, v._labBrand) !== brand) return false;
     return true;
   }), [baseRows, brand, instrument]);
   const engineerOpts = useMemo(() => Array.from(new Set(rows.flatMap(v => [v.engineer, v.engineer2, v.engineer3]).map(x => String(x || "").trim()).filter(Boolean))).sort(), [rows]);
@@ -10772,11 +10773,17 @@ function AnalyticsTab({
   const anyFilter = brand !== "All" || instrument !== "All" || engineer !== "All" || from || to;
 
   // KPI numbers
-  const __liveSet = React.useMemo(() => new Set(activeUniqueMachineRows(labs).map(r => r.m)), [labs]); // v374: same active base as the Dashboard
-  const machinesInScope = allMachines.filter(m => {
+  // v378: the EXACT active base the Dashboard counts (live status, de-duplicated by serial).
+  // (v374 compared spread copies against the originals, so nothing ever matched → 0 machines.)
+  const __liveRows = React.useMemo(() => activeUniqueMachineRows(labs).map(r => ({
+    ...r.m,
+    _lab: r.lab.name,
+    _labBrand: r.lab.brand || ""
+  })), [labs]);
+  const machinesInScope = __liveRows.filter(m => {
     if (instrument !== "All" && String(m.instrument || "").trim() !== instrument) return false;
-    if (brand !== "All" && !String(m.instrument || "").toLowerCase().startsWith(String(brand).toLowerCase())) return false;
-    return __liveSet.has(m);
+    if (brand !== "All" && brandFromModel(m.instrument, m._labBrand) !== brand) return false;
+    return true;
   });
   const mTot = machinesInScope.length;
   const overdue = machinesInScope.filter(m => pmFlag(m) === "Overdue").length;
@@ -10790,11 +10797,11 @@ function AnalyticsTab({
   // datasets
   const statusData = useMemo(() => {
     const c = {
-      "OK": 0,
-      "Due Next Month": 0,
-      "Due This Month": 0,
+      "Overdue": 0,
       "Due This Week": 0,
-      "Overdue": 0
+      "Due This Month": 0,
+      "Due Next Month": 0,
+      "OK": 0
     };
     machinesInScope.forEach(m => {
       const f = pmFlag(m);
