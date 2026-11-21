@@ -627,7 +627,7 @@
 (function () {
   var okLibs = (typeof firebase !== "undefined") && (typeof React !== "undefined") && (typeof ReactDOM !== "undefined") && (typeof XLSX !== "undefined");
   window.__IBASE_LIBS_OK = okLibs;
-  window.__IBASE_BUILD = "v376";
+  window.__IBASE_BUILD = "v377";
   if (!okLibs) {
     document.getElementById("root").innerHTML =
       "<div style='max-width:520px;margin:90px auto;padding:30px;background:#16181d;border:1px solid #f8717155;border-radius:16px;font-family:system-ui,sans-serif;color:#e5e7eb;text-align:center'>" +
@@ -3750,7 +3750,7 @@ function Login({
       letterSpacing: 2,
       textTransform: "uppercase"
     }
-  }, "version: v376"), /*#__PURE__*/React.createElement(React.Fragment, null,
+  }, "version: v377"), /*#__PURE__*/React.createElement(React.Fragment, null,
   /*#__PURE__*/React.createElement("label", {
     style: labelSt
   }, "Email"), /*#__PURE__*/React.createElement("input", {
@@ -12629,10 +12629,22 @@ function WpoaTab({ profile, notify }) {
     return [...new Set(fromDeps.concat(fromList, fromUsers).map(x => String(x || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   };
  const wpoaEmployees = wpoaRoster();
+ // v377: MANILA / ILOILO / CEBU / MINDANAO list ONLY Engineering Department employees; APPS lists ONLY Application Specialist Department employees.
+ const wpoaRosterSec = sec => {
+  const cat = (typeof window !== "undefined" && window.__ibaseCatalog) || {};
+  const wantApps = sec === "apps";
+  const deps = (cat.departments || []).filter(d => {
+   const nm = String(d && d.name || ""), id = String(d && d.id || "");
+   return wantApps ? (id === "apps" || /application/i.test(nm)) : (id === "eng" || /engineering/i.test(nm));
+  });
+  const names = deps.flatMap(d => Array.isArray(d.employees) ? d.employees : []).map(x => String(x && x.name || x || "").trim()).filter(Boolean);
+  return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+ };
+ const wpoaRosterSig = () => wpoaRosterSec("main").join("|") + "#" + wpoaRosterSec("apps").join("|");
  const [rosterTick, setRosterTick] = useState(0);
- const rosterSig = React.useRef(wpoaEmployees.join("|"));
+ const rosterSig = React.useRef(wpoaRosterSig());
  useEffect(() => {
-  const iv = setInterval(() => { try { const sg = wpoaRoster().join("|"); if (sg !== rosterSig.current) { rosterSig.current = sg; setRosterTick(t => t + 1); } } catch (e) {} }, 1500);
+  const iv = setInterval(() => { try { const sg = wpoaRosterSig(); if (sg !== rosterSig.current) { rosterSig.current = sg; setRosterTick(t => t + 1); } } catch (e) {} }, 1500);
   return () => clearInterval(iv);
  }, []);
  const [addSec, setAddSec] = useState("main");
@@ -12756,10 +12768,17 @@ function WpoaTab({ profile, notify }) {
   const tabRef = React.useRef(null);
  useEffect(() => { if (focusCell && focusCell.sec) setAddSec(focusCell.sec); }, [focusCell]);
   useEffect(() => {
-    if (tabRef.current && tabRef.current.scrollIntoView) {
-      try { tabRef.current.scrollIntoView({ inline: "center", block: "nearest" }); } catch (e) {}
-    }
-  }, [week, periodId]);
+  const center = () => {
+   try {
+    const b = tabRef.current, c = b && b.parentNode;
+    if (!b || !c) return;
+    const rb = b.getBoundingClientRect(), rc = c.getBoundingClientRect();
+    c.scrollTo({ left: Math.max(0, c.scrollLeft + (rb.left - rc.left) - (c.clientWidth - rb.width) / 2), behavior: "smooth" });
+   } catch (e) {}
+  };
+  const t1 = setTimeout(center, 0), t2 = setTimeout(center, 250);
+  return () => { clearTimeout(t1); clearTimeout(t2); };
+ }, [week, periodId]);
   const meKey = ((auth.currentUser && auth.currentUser.uid) || meEmail(profile) || "anon").replace(/[^A-Za-z0-9_-]/g, "_");
   const meName = (profile && profile.name) || "Teammate";  // never store an email as the presence label
   // Only show a real display name; never render an email address to teammates.
@@ -13039,7 +13058,7 @@ function WpoaTab({ profile, notify }) {
     title: "Pick the employee for this board",
     onChange: e => { const v0 = e.target.value; if (v0 === "__other__") { const v1 = prompt("Type the name for this row:", nameOf(sec, pid) || ""); if (v1 !== null) writeName(sec, pid, String(v1).trim()); } else writeName(sec, pid, v0); },
     style: { width: "100%", boxSizing: "border-box", border: "none", outline: "none", background: "transparent", color: "#000", fontWeight: 700, textAlign: "center", fontSize: 11.5, fontFamily: "inherit", cursor: "pointer", appearance: "none", WebkitAppearance: "none", MozAppearance: "none" }
-  }, /*#__PURE__*/React.createElement("option", { value: "" }, "[Name]"), (nameOf(sec, pid) && !wpoaEmployees.includes(nameOf(sec, pid))) ? /*#__PURE__*/React.createElement("option", { value: nameOf(sec, pid) }, nameOf(sec, pid)) : null, wpoaEmployees.map(nm => /*#__PURE__*/React.createElement("option", { key: nm, value: nm }, nm)), /*#__PURE__*/React.createElement("option", { value: "__other__" }, "✎ Type another name…")), /*#__PURE__*/React.createElement("button", {
+  }, /*#__PURE__*/React.createElement("option", { value: "" }, "[Name]"), (nameOf(sec, pid) && !wpoaRosterSec(sec).includes(nameOf(sec, pid))) ? /*#__PURE__*/React.createElement("option", { value: nameOf(sec, pid) }, nameOf(sec, pid)) : null, wpoaRosterSec(sec).map(nm => /*#__PURE__*/React.createElement("option", { key: nm, value: nm }, nm)), /*#__PURE__*/React.createElement("option", { value: "__other__" }, "✎ Type another name…")), /*#__PURE__*/React.createElement("button", {
     title: "Remove this name row",
     onClick: () => delPerson(sec, pid),
     style: { position: "absolute", top: 1, right: 1, background: "none", border: "none", cursor: "pointer", fontSize: 9, color: "#a00" }
