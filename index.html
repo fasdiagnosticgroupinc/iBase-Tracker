@@ -627,7 +627,7 @@
 (function () {
   var okLibs = (typeof firebase !== "undefined") && (typeof React !== "undefined") && (typeof ReactDOM !== "undefined") && (typeof XLSX !== "undefined");
   window.__IBASE_LIBS_OK = okLibs;
-  window.__IBASE_BUILD = "v374";
+  window.__IBASE_BUILD = "v376";
   if (!okLibs) {
     document.getElementById("root").innerHTML =
       "<div style='max-width:520px;margin:90px auto;padding:30px;background:#16181d;border:1px solid #f8717155;border-radius:16px;font-family:system-ui,sans-serif;color:#e5e7eb;text-align:center'>" +
@@ -3750,7 +3750,7 @@ function Login({
       letterSpacing: 2,
       textTransform: "uppercase"
     }
-  }, "version: v374"), /*#__PURE__*/React.createElement(React.Fragment, null,
+  }, "version: v376"), /*#__PURE__*/React.createElement(React.Fragment, null,
   /*#__PURE__*/React.createElement("label", {
     style: labelSt
   }, "Email"), /*#__PURE__*/React.createElement("input", {
@@ -12621,13 +12621,30 @@ class TabBoundary extends React.Component {
 function WpoaTab({ profile, notify }) {
   // Alphabetical employee roster from the shared catalog (departments' employees
   // + any registered names) — same source the visit form uses; everyone can read /config.
-  const wpoaEmployees = React.useMemo(() => {
+  const wpoaRoster = () => {
     const cat = (typeof window !== "undefined" && window.__ibaseCatalog) || {};
     const fromDeps = (cat.departments || []).flatMap(d => Array.isArray(d.employees) ? d.employees : []);
     const fromList = (cat.employees || []).map(e2 => e2 && (e2.name || e2));
     const fromUsers = (typeof window !== "undefined" && window.__ibaseEngineers) || [];
     return [...new Set(fromDeps.concat(fromList, fromUsers).map(x => String(x || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  }, []);
+  };
+ const wpoaEmployees = wpoaRoster();
+ const [rosterTick, setRosterTick] = useState(0);
+ const rosterSig = React.useRef(wpoaEmployees.join("|"));
+ useEffect(() => {
+  const iv = setInterval(() => { try { const sg = wpoaRoster().join("|"); if (sg !== rosterSig.current) { rosterSig.current = sg; setRosterTick(t => t + 1); } } catch (e) {} }, 1500);
+  return () => clearInterval(iv);
+ }, []);
+ const [addSec, setAddSec] = useState("main");
+ const [stickTop, setStickTop] = useState(62);
+ useEffect(() => {
+  const measure = () => { try { const tb = document.querySelector(".ib-topbar"); if (tb) setStickTop(Math.round(tb.getBoundingClientRect().height)); } catch (e) {} };
+  measure();
+  let ro = null;
+  try { const tb = document.querySelector(".ib-topbar"); if (tb && window.ResizeObserver) { ro = new ResizeObserver(measure); ro.observe(tb); } } catch (e) {}
+  window.addEventListener("resize", measure);
+  return () => { window.removeEventListener("resize", measure); if (ro) ro.disconnect(); };
+ }, []);
   const holidaysDoc = useDoc("config/holidays", true);
   const holidayMap = useMemo(() => otHolidayMapFromList(holidaysDoc && holidaysDoc.list || []), [holidaysDoc]);
   const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
@@ -12670,6 +12687,35 @@ function WpoaTab({ profile, notify }) {
   };
   const [week, setWeek] = useState(defWeek);
   useEffect(() => { setWeek(defWeek()); }, [periodId]);
+ // v376: a week with no names/rows of its own INHERITS them from the nearest earlier week
+ // (walks back up to 26 weeks, across years). Anything edited in this week overrides.
+ const [inh, setInh] = useState({ names: {}, order: {} });
+ useEffect(() => {
+  let dead = false;
+  const run = async () => {
+   try {
+    const d = new Date(week + "T00:00:00");
+    for (let i = 0; i < 26; i++) {
+     d.setDate(d.getDate() - 7);
+     const sn = await db.collection("wpoa").doc("w_" + isoLocal(d)).get();
+     if (dead) return;
+     if (sn && sn.exists) {
+      const v = sn.data() || {};
+      const names = v.names || {};
+      const order = {};
+      let any = Object.keys(names).some(k3 => names[k3]);
+      SECTIONS.forEach(sc => { const o = v["order_" + sc.sec]; if (Array.isArray(o) && o.length) { order[sc.sec] = o; any = true; } });
+      if (any) { setInh({ names: names, order: order }); return; }
+     }
+    }
+    if (!dead) setInh({ names: {}, order: {} });
+   } catch (e) {}
+  };
+  setInh({ names: {}, order: {} });
+  run();
+  const iv = setInterval(run, 30000);
+  return () => { dead = true; clearInterval(iv); };
+ }, [week]);
   const weekDates = useMemo(() => {
     const out = [];
     const d = new Date(week + "T00:00:00");
@@ -12708,6 +12754,7 @@ function WpoaTab({ profile, notify }) {
   const timersRef = React.useRef({});
   const migTried = React.useRef({}); // one-shot per week: adopt the old Sunday-keyed doc (pre-v165 timezone bug)
   const tabRef = React.useRef(null);
+ useEffect(() => { if (focusCell && focusCell.sec) setAddSec(focusCell.sec); }, [focusCell]);
   useEffect(() => {
     if (tabRef.current && tabRef.current.scrollIntoView) {
       try { tabRef.current.scrollIntoView({ inline: "center", block: "nearest" }); } catch (e) {}
@@ -12803,12 +12850,12 @@ function WpoaTab({ profile, notify }) {
   }, [week]);
   const rd = remote || {};
   const und = v => v === undefined;
-  const orderOf = sec => !und(localOv["o:" + sec]) ? localOv["o:" + sec] : Array.isArray(rd["order_" + sec]) && rd["order_" + sec].length ? rd["order_" + sec] : DEFAULT_IDS;
+  const orderOf = sec => !und(localOv["o:" + sec]) ? localOv["o:" + sec] : Array.isArray(rd["order_" + sec]) && rd["order_" + sec].length ? rd["order_" + sec] : Array.isArray(inh.order[sec]) && inh.order[sec].length ? inh.order[sec] : DEFAULT_IDS;
   const nameOf = (sec, pid) => {
     const k = "n:" + sec + "_" + pid;
     if (!und(localOv[k])) return localOv[k];
     const r = (rd.names || {})[sec + "_" + pid];
-    return r === undefined ? "" : r;
+    return r === undefined ? (inh.names[sec + "_" + pid] || "") : r;
   };
   const titleOf = sec => {
     const k = "t:" + sec;
@@ -12990,9 +13037,9 @@ function WpoaTab({ profile, notify }) {
   }, /*#__PURE__*/React.createElement("select", {
     value: nameOf(sec, pid),
     title: "Pick the employee for this board",
-    onChange: e => writeName(sec, pid, e.target.value),
+    onChange: e => { const v0 = e.target.value; if (v0 === "__other__") { const v1 = prompt("Type the name for this row:", nameOf(sec, pid) || ""); if (v1 !== null) writeName(sec, pid, String(v1).trim()); } else writeName(sec, pid, v0); },
     style: { width: "100%", boxSizing: "border-box", border: "none", outline: "none", background: "transparent", color: "#000", fontWeight: 700, textAlign: "center", fontSize: 11.5, fontFamily: "inherit", cursor: "pointer", appearance: "none", WebkitAppearance: "none", MozAppearance: "none" }
-  }, /*#__PURE__*/React.createElement("option", { value: "" }, "[Name]"), (nameOf(sec, pid) && !wpoaEmployees.includes(nameOf(sec, pid))) ? /*#__PURE__*/React.createElement("option", { value: nameOf(sec, pid) }, nameOf(sec, pid)) : null, wpoaEmployees.map(nm => /*#__PURE__*/React.createElement("option", { key: nm, value: nm }, nm))), /*#__PURE__*/React.createElement("button", {
+  }, /*#__PURE__*/React.createElement("option", { value: "" }, "[Name]"), (nameOf(sec, pid) && !wpoaEmployees.includes(nameOf(sec, pid))) ? /*#__PURE__*/React.createElement("option", { value: nameOf(sec, pid) }, nameOf(sec, pid)) : null, wpoaEmployees.map(nm => /*#__PURE__*/React.createElement("option", { key: nm, value: nm }, nm)), /*#__PURE__*/React.createElement("option", { value: "__other__" }, "✎ Type another name…")), /*#__PURE__*/React.createElement("button", {
     title: "Remove this name row",
     onClick: () => delPerson(sec, pid),
     style: { position: "absolute", top: 1, right: 1, background: "none", border: "none", cursor: "pointer", fontSize: 9, color: "#a00" }
@@ -13006,8 +13053,11 @@ function WpoaTab({ profile, notify }) {
     onClick: () => applyFmt({ al: al })
   }, sym);
   return /*#__PURE__*/React.createElement("div", { onKeyDownCapture: wpoaOnKeyDown }, /*#__PURE__*/React.createElement("div", {
-    style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }
-  }, PERIODS.map(p => /*#__PURE__*/React.createElement("button", {
+ className: "ib-wpoa-sticky",
+ style: { position: "sticky", top: stickTop, zIndex: 40, background: "var(--c-bg)", padding: "8px 0 2px", marginBottom: 10, boxShadow: "0 6px 14px rgba(0,0,0,.35)" }
+ }, /*#__PURE__*/React.createElement("style", null, "body.ib-small .ib-wpoa-sticky{max-height:46vh;overflow-y:auto} body.ib-small .ib-wpoa-hint{display:none}"), /*#__PURE__*/React.createElement("div", {
+ style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }
+ }, PERIODS.map(p => /*#__PURE__*/React.createElement("button", {
     key: p.id,
     className: "ib-subtab",
     style: btnSt(periodId === p.id ? "var(--c-key)" : "var(--c-border)", periodId === p.id ? "var(--c-bg)" : "var(--c-text2)"),
@@ -13025,7 +13075,8 @@ function WpoaTab({ profile, notify }) {
       style: { ...btnSt(act ? "var(--c-key)" : "var(--c-border)", act ? "var(--c-bg)" : "var(--c-text2)"), padding: "5px 10px", fontSize: 11.5, fontWeight: act ? 800 : 600, borderRadius: "8px 8px 0 0", flexShrink: 0, whiteSpace: "nowrap" }
     }, weekTabShort(w2));
   })), /*#__PURE__*/React.createElement("div", {
-    style: { flexBasis: "100%", fontSize: 10.5, color: "var(--c-text5)", marginTop: -4 }
+    className: "ib-wpoa-hint",
+ style: { flexBasis: "100%", fontSize: 10.5, color: "var(--c-text5)", marginTop: -4 }
   }, "Each week is its own sheet \u2014 like Excel tabs. Opening a sheet changes only your view; everyone can work on different weeks at the same time, and edits meet only when two people open the SAME sheet."), hdrRangeOv() && hdrRangeOv() !== rangeLabel ? /*#__PURE__*/React.createElement("div", {
     style: { flexBasis: "100%", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 11.5, color: "#f59e0b", background: "rgba(245,158,11,.10)", border: "1px solid rgba(245,158,11,.45)", borderRadius: 8, padding: "5px 10px" }
   }, "\u270e Someone edited the yellow date label to \u201c" + hdrRangeOv() + "\u201d \u2014 that changes only the LABEL. This sheet still holds the week of " + rangeLabel + ".", /*#__PURE__*/React.createElement("button", {
@@ -13077,7 +13128,7 @@ function WpoaTab({ profile, notify }) {
     title: "Clear this cell's colors",
     style: btnSt("var(--c-border)", "var(--c-text2)"),
     onClick: () => applyFmt({ bg: "", fc: "" })
-  }, "⌫ Clear color"), /*#__PURE__*/React.createElement("span", { style: { color: "var(--c-text5)" } }, focusCell ? "editing " + titleOf(focusCell.sec) + " · row " + (orderOf(focusCell.sec).indexOf(focusCell.pid) + 1) + " · " + DAYS[focusCell.di] : "click a cell first"), /*#__PURE__*/React.createElement("span", { style: { color: "var(--c-text5)", marginLeft: 8 } }, "· Ctrl+Z undo · Ctrl+Y redo")), /*#__PURE__*/React.createElement("div", {
+  }, "⌫ Clear color"), /*#__PURE__*/React.createElement("span", { style: { color: "var(--c-text5)" } }, focusCell ? "editing " + titleOf(focusCell.sec) + " · row " + (orderOf(focusCell.sec).indexOf(focusCell.pid) + 1) + " · " + DAYS[focusCell.di] : "click a cell first"), /*#__PURE__*/React.createElement("span", { style: { color: "var(--c-text5)", marginLeft: 8 } }, "· Ctrl+Z undo · Ctrl+Y redo"), /*#__PURE__*/React.createElement("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 } }, /*#__PURE__*/React.createElement("select", { value: addSec, title: "Which sheet the new name row goes to", onChange: e => setAddSec(e.target.value), style: { fontSize: 11.5, padding: "3px 6px", background: "var(--c-bg2)", color: "var(--c-text)", border: "1px solid var(--c-border)", borderRadius: 6 } }, SECTIONS.map(sc => /*#__PURE__*/React.createElement("option", { key: sc.sec, value: sc.sec }, titleOf(sc.sec)))), /*#__PURE__*/React.createElement("button", { style: btnSt("var(--c-border)", "var(--c-text2)"), title: "Add a new name row to the chosen sheet (works on any week or year)", onClick: () => addPerson(addSec) }, "➕ Add name")))), /*#__PURE__*/React.createElement("div", {
     style: { background: "#fff", color: "#000", border: "1px solid var(--c-border)", borderRadius: 6, padding: "12px 14px", overflowX: "auto", boxShadow: "0 6px 24px rgba(0,0,0,.25)" }
   }, SECTIONS.map(sc => /*#__PURE__*/React.createElement("div", {
     key: sc.sec,
