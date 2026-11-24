@@ -627,7 +627,7 @@
 (function () {
   var okLibs = (typeof firebase !== "undefined") && (typeof React !== "undefined") && (typeof ReactDOM !== "undefined") && (typeof XLSX !== "undefined");
   window.__IBASE_LIBS_OK = okLibs;
-  window.__IBASE_BUILD = "v379";
+  window.__IBASE_BUILD = "v380";
   if (!okLibs) {
     document.getElementById("root").innerHTML =
       "<div style='max-width:520px;margin:90px auto;padding:30px;background:#16181d;border:1px solid #f8717155;border-radius:16px;font-family:system-ui,sans-serif;color:#e5e7eb;text-align:center'>" +
@@ -3750,7 +3750,7 @@ function Login({
       letterSpacing: 2,
       textTransform: "uppercase"
     }
-  }, "version: v379"), /*#__PURE__*/React.createElement(React.Fragment, null,
+  }, "version: v380"), /*#__PURE__*/React.createElement(React.Fragment, null,
   /*#__PURE__*/React.createElement("label", {
     style: labelSt
   }, "Email"), /*#__PURE__*/React.createElement("input", {
@@ -12980,9 +12980,11 @@ function WpoaTab({ profile, notify }) {
   // and B–H (Mon–Sun) across the top, row numbers down the left; the ones you are editing glow.
   const wpCol = i => String.fromCharCode(65 + i);
   const wpRowOf = sec => focusCell && focusCell.sec === sec ? 4 + orderOf(sec).indexOf(focusCell.pid) * 3 + focusCell.li : -1;
-  const wpHdrSt = (on, side) => ({ border: "1px solid #c0c0c0", boxSizing: "border-box", background: on ? "#d3e3fd" : "#f1f3f4", color: on ? "#0b57d0" : "#5f6368", fontWeight: on ? 800 : 600, fontSize: 10.5, fontFamily: "Arial, Helvetica, sans-serif", textAlign: "center", verticalAlign: "middle", padding: 0, height: 18, userSelect: "none", transition: "background .15s, box-shadow .15s, color .15s", boxShadow: on ? (side ? "inset -3px 0 0 #1a73e8, 0 0 9px rgba(26,115,232,.6)" : "inset 0 -3px 0 #1a73e8, 0 0 9px rgba(26,115,232,.6)") : "none", position: "relative", zIndex: on ? 1 : 0 });
+  const wpHdrSt = (on, side) => ({ border: CELLBORDER, boxSizing: "border-box", background: on ? "#d3e3fd" : "#f1f3f4", color: on ? "#0b57d0" : "#5f6368", fontWeight: on ? 800 : 600, fontSize: 10.5, fontFamily: "Arial, Helvetica, sans-serif", textAlign: "center", verticalAlign: "middle", padding: 0, height: 18, userSelect: "none", transition: "background .15s, color .15s", textShadow: on ? "0 0 6px rgba(26,115,232,.75)" : "none" });
+  const WPOPT = { background: "#fff", color: "#000" }; // v380: dropdown list always black-on-white, every theme
   const wpGutter = (sec, n) => /*#__PURE__*/React.createElement("td", { key: "rn" + n, title: "Row " + n, style: wpHdrSt(wpRowOf(sec) === n, true) }, n);
   const grid = sec => /*#__PURE__*/React.createElement("table", {
+    className: "ib-wpoa-sheet",
     style: { width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 1000, marginBottom: 6 }
   }, /*#__PURE__*/React.createElement("colgroup", null, /*#__PURE__*/React.createElement("col", { style: { width: 34 } }), /*#__PURE__*/React.createElement("col", { style: { width: "9%" } }), DAYS.map((_, i) => /*#__PURE__*/React.createElement("col", { key: i, style: { width: "13%" } }))), /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", { style: { ...wpHdrSt(false), background: "#e8eaed" } }), [0, 1, 2, 3, 4, 5, 6, 7].map(ci => /*#__PURE__*/React.createElement("td", { key: "cl" + ci, title: "Column " + wpCol(ci) + (ci ? " — " + DAYS[ci - 1] : " — Names"), style: wpHdrSt(!!(focusCell && focusCell.sec === sec && focusCell.di + 1 === ci)) }, wpCol(ci)))), /*#__PURE__*/React.createElement("tr", null, wpGutter(sec, 1), /*#__PURE__*/React.createElement("td", {
     rowSpan: 3,
@@ -13020,8 +13022,8 @@ function WpoaTab({ profile, notify }) {
     value: nameOf(sec, pid),
     title: "Pick the employee for this board",
     onChange: e => { const v0 = e.target.value; if (v0 === "__other__") { const v1 = prompt("Type the name for this row:", nameOf(sec, pid) || ""); if (v1 !== null) writeName(sec, pid, String(v1).trim()); } else writeName(sec, pid, v0); },
-    style: { width: "100%", boxSizing: "border-box", border: "none", outline: "none", background: "transparent", color: "#000", fontWeight: 700, textAlign: "center", fontSize: 11.5, fontFamily: "inherit", cursor: "pointer", appearance: "none", WebkitAppearance: "none", MozAppearance: "none" }
-  }, /*#__PURE__*/React.createElement("option", { value: "" }, "[Name]"), (nameOf(sec, pid) && !wpoaRosterSec(sec).includes(nameOf(sec, pid))) ? /*#__PURE__*/React.createElement("option", { value: nameOf(sec, pid) }, nameOf(sec, pid)) : null, wpoaRosterSec(sec).map(nm => /*#__PURE__*/React.createElement("option", { key: nm, value: nm }, nm)), /*#__PURE__*/React.createElement("option", { value: "__other__" }, "✎ Type another name…")), /*#__PURE__*/React.createElement("button", {
+    style: { width: "100%", boxSizing: "border-box", border: "none", outline: "none", background: "transparent", color: "#000", fontWeight: 700, textAlign: "center", fontSize: 11.5, fontFamily: "inherit", cursor: "pointer", appearance: "none", WebkitAppearance: "none", MozAppearance: "none", colorScheme: "light" }
+  }, /*#__PURE__*/React.createElement("option", { style: WPOPT, value: "" }, "[Name]"), (nameOf(sec, pid) && !wpoaRosterSec(sec).includes(nameOf(sec, pid))) ? /*#__PURE__*/React.createElement("option", { style: WPOPT, value: nameOf(sec, pid) }, nameOf(sec, pid)) : null, wpoaRosterSec(sec).map(nm => /*#__PURE__*/React.createElement("option", { style: WPOPT, key: nm, value: nm }, nm)), /*#__PURE__*/React.createElement("option", { style: WPOPT, value: "__other__" }, "✎ Type another name…")), /*#__PURE__*/React.createElement("button", {
     title: "Remove this name row",
     onClick: () => delPerson(sec, pid),
     style: { position: "absolute", top: 1, right: 1, background: "none", border: "none", cursor: "pointer", fontSize: 9, color: "#a00" }
@@ -13037,7 +13039,7 @@ function WpoaTab({ profile, notify }) {
   return /*#__PURE__*/React.createElement("div", { onKeyDownCapture: wpoaOnKeyDown }, /*#__PURE__*/React.createElement("div", {
  className: "ib-wpoa-sticky",
  style: { position: "sticky", top: stickTop, zIndex: 40, background: "var(--c-bg)", padding: "8px 0 2px", marginBottom: 10, boxShadow: "0 6px 14px rgba(0,0,0,.35)" }
- }, /*#__PURE__*/React.createElement("style", null, "body.ib-small .ib-wpoa-sticky{max-height:46vh;overflow-y:auto} body.ib-small .ib-wpoa-hint{display:none}"), /*#__PURE__*/React.createElement("div", {
+ }, /*#__PURE__*/React.createElement("style", null, "body.ib-small .ib-wpoa-sticky{max-height:46vh;overflow-y:auto} body.ib-small .ib-wpoa-hint{display:none} .ib-wpoa-sheet input:focus,.ib-wpoa-sheet input:focus-visible,.ib-wpoa-sheet select:focus,.ib-wpoa-sheet select:focus-visible{outline:none !important;border-color:transparent !important} .ib-wpoa-sheet select,.ib-wpoa-sheet select option{color-scheme:light;background-color:#fff;color:#000}"), /*#__PURE__*/React.createElement("div", {
  style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }
  }, PERIODS.map(p => /*#__PURE__*/React.createElement("button", {
     key: p.id,
