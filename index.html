@@ -627,7 +627,7 @@
 (function () {
   var okLibs = (typeof firebase !== "undefined") && (typeof React !== "undefined") && (typeof ReactDOM !== "undefined") && (typeof XLSX !== "undefined");
   window.__IBASE_LIBS_OK = okLibs;
-  window.__IBASE_BUILD = "v378";
+  window.__IBASE_BUILD = "v379";
   if (!okLibs) {
     document.getElementById("root").innerHTML =
       "<div style='max-width:520px;margin:90px auto;padding:30px;background:#16181d;border:1px solid #f8717155;border-radius:16px;font-family:system-ui,sans-serif;color:#e5e7eb;text-align:center'>" +
@@ -3750,7 +3750,7 @@ function Login({
       letterSpacing: 2,
       textTransform: "uppercase"
     }
-  }, "version: v378"), /*#__PURE__*/React.createElement(React.Fragment, null,
+  }, "version: v379"), /*#__PURE__*/React.createElement(React.Fragment, null,
   /*#__PURE__*/React.createElement("label", {
     style: labelSt
   }, "Email"), /*#__PURE__*/React.createElement("input", {
@@ -4351,6 +4351,7 @@ function DashboardTab({
   // View selectors for the two PM cards + the Compliance pie/bar dataset.
   const [dashStatusChart, setDashStatusChart] = useState("pie");
   const [dashCompChart, setDashCompChart] = useState("pie");
+  const [dashInstChart, setDashInstChart] = useState("bar"); // v379
   const compData = [{ label: "Compliant", value: Math.max(activeN - overdue, 0), color: "#10b981" }, { label: "Overdue", value: overdue, color: "#ef4444" }].filter(d => d.value > 0);
   // maintenance alerts — rendered through the shared table kit
   const urgent = flagged.filter(x => x.flag !== "OK");
@@ -4400,77 +4401,26 @@ function DashboardTab({
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: "1.4fr 1fr 0.8fr",
+      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
       gap: 16,
       marginBottom: 16
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: cardSt
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      fontWeight: 800,
-      color: "var(--c-text3)",
-      textTransform: "uppercase",
-      marginBottom: 10
-    }
-  }, "Installed Base by Instrument"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      maxHeight: 300,
-      overflowY: "auto",
-      paddingRight: 6
-    }
-  }, instData.map((d, i) => /*#__PURE__*/React.createElement("div", {
-    key: d.name,
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      marginBottom: 7
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    title: d.name,
-    style: {
-      width: 130,
-      fontSize: 11,
-      color: "var(--c-text2)",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap",
-      textAlign: "right"
-    }
-  }, d.name), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      background: "var(--c-bg)",
-      borderRadius: 5,
-      height: 16,
-      overflow: "hidden"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "ib-dash-bar",
-    style: {
-      width: Math.max(4, d.value / instMax * 100) + "%",
-      height: "100%",
-      borderRadius: 5,
-      background: CHART_PALETTE[i % CHART_PALETTE.length],
-      transition: "width .4s",
-      animationDelay: Math.min(i, 20) * 0.035 + "s"
-    }
-  })), /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: 30,
-      fontSize: 12,
-      fontWeight: 800
-    }
-  }, d.value))), instData.length === 0 && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(CardWithToggle, {
+    title: "Installed Base by Instrument",
+    chartType: dashInstChart,
+    setChartType: setDashInstChart
+  }, instData.length ? /*#__PURE__*/React.createElement(FlexChart, {
+    type: dashInstChart,
+    data: instData.map((d, i) => ({ label: d.name, value: d.value, color: CHART_PALETTE[i % CHART_PALETTE.length] })),
+    donut: true
+  }) : /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: "var(--c-text4)",
       padding: "24px 0",
       textAlign: "center"
     }
-  }, "No machines yet."))), /*#__PURE__*/React.createElement(CardWithToggle, {
+  }, "No machines yet.")), /*#__PURE__*/React.createElement(CardWithToggle, {
     title: "PM Status Distribution",
     chartType: dashStatusChart,
     setChartType: setDashStatusChart
@@ -13023,12 +12973,18 @@ function WpoaTab({ profile, notify }) {
       onChange: e => writeCell(sec, pid, di, li, { t: e.target.value }),
       onFocus: () => setFocusCell({ sec: sec, pid: pid, di: di, li: li }),
       title: oc ? "\u270e " + (wpoaDisp(on) || "A teammate") + " is editing this cell right now" : undefined,
-      style: { width: "100%", boxSizing: "border-box", border: "none", outline: "none", background: c.bg || "transparent", color: c.fc || "#000", textAlign: c.al || "center", fontSize: 11, fontFamily: "Arial, Helvetica, sans-serif", padding: "1px 3px", height: 19, boxShadow: oc ? "inset 0 0 0 2px " + oc : "none" }
+      style: { width: "100%", boxSizing: "border-box", border: "none", outline: "none", background: c.bg || "transparent", color: c.fc || "#000", textAlign: c.al || "center", fontSize: 11, fontFamily: "Arial, Helvetica, sans-serif", padding: "1px 3px", height: 19, boxShadow: oc ? "inset 0 0 0 2px " + oc : (focusCell && focusCell.sec === sec && focusCell.pid === pid && focusCell.di === di && focusCell.li === li) ? "inset 0 0 0 2px #1a73e8" : "none" }
     });
   };
+  // v379: spreadsheet-style headers (screen only — printing uses gridHTML). Column letters A (names)
+  // and B–H (Mon–Sun) across the top, row numbers down the left; the ones you are editing glow.
+  const wpCol = i => String.fromCharCode(65 + i);
+  const wpRowOf = sec => focusCell && focusCell.sec === sec ? 4 + orderOf(sec).indexOf(focusCell.pid) * 3 + focusCell.li : -1;
+  const wpHdrSt = (on, side) => ({ border: "1px solid #c0c0c0", boxSizing: "border-box", background: on ? "#d3e3fd" : "#f1f3f4", color: on ? "#0b57d0" : "#5f6368", fontWeight: on ? 800 : 600, fontSize: 10.5, fontFamily: "Arial, Helvetica, sans-serif", textAlign: "center", verticalAlign: "middle", padding: 0, height: 18, userSelect: "none", transition: "background .15s, box-shadow .15s, color .15s", boxShadow: on ? (side ? "inset -3px 0 0 #1a73e8, 0 0 9px rgba(26,115,232,.6)" : "inset 0 -3px 0 #1a73e8, 0 0 9px rgba(26,115,232,.6)") : "none", position: "relative", zIndex: on ? 1 : 0 });
+  const wpGutter = (sec, n) => /*#__PURE__*/React.createElement("td", { key: "rn" + n, title: "Row " + n, style: wpHdrSt(wpRowOf(sec) === n, true) }, n);
   const grid = sec => /*#__PURE__*/React.createElement("table", {
     style: { width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 1000, marginBottom: 6 }
-  }, /*#__PURE__*/React.createElement("colgroup", null, /*#__PURE__*/React.createElement("col", { style: { width: "9%" } }), DAYS.map((_, i) => /*#__PURE__*/React.createElement("col", { key: i, style: { width: "13%" } }))), /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+  }, /*#__PURE__*/React.createElement("colgroup", null, /*#__PURE__*/React.createElement("col", { style: { width: 34 } }), /*#__PURE__*/React.createElement("col", { style: { width: "9%" } }), DAYS.map((_, i) => /*#__PURE__*/React.createElement("col", { key: i, style: { width: "13%" } }))), /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", { style: { ...wpHdrSt(false), background: "#e8eaed" } }), [0, 1, 2, 3, 4, 5, 6, 7].map(ci => /*#__PURE__*/React.createElement("td", { key: "cl" + ci, title: "Column " + wpCol(ci) + (ci ? " — " + DAYS[ci - 1] : " — Names"), style: wpHdrSt(!!(focusCell && focusCell.sec === sec && focusCell.di + 1 === ci)) }, wpCol(ci)))), /*#__PURE__*/React.createElement("tr", null, wpGutter(sec, 1), /*#__PURE__*/React.createElement("td", {
     rowSpan: 3,
     style: { border: CELLBORDER, boxSizing: "border-box", background: "#fff", color: "#000", padding: 0, verticalAlign: "middle" }
   }, /*#__PURE__*/React.createElement("input", {
@@ -13044,10 +13000,10 @@ function WpoaTab({ profile, notify }) {
     onChange: e => writeHdrRange(e.target.value),
     title: "Auto-filled from the calendar (Monday to Sunday). Type to correct it; clear it to go back to automatic.",
     style: { width: "100%", boxSizing: "border-box", border: "none", outline: "none", background: "transparent", color: "#000", fontWeight: 800, textAlign: "center", fontSize: 12.5, fontFamily: "inherit", height: "100%", padding: 0 }
-  }))), /*#__PURE__*/React.createElement("tr", null, DAYS.map((d, di) => /*#__PURE__*/React.createElement("th", {
+  }))), /*#__PURE__*/React.createElement("tr", null, wpGutter(sec, 2), DAYS.map((d, di) => /*#__PURE__*/React.createElement("th", {
     key: d,
     style: { border: CELLBORDER, boxSizing: "border-box", background: isHol(di) ? "#f2ceef" : "#92d4ec", color: "#000", fontWeight: 800, fontSize: 11.5, height: 20 }
-  }, d))), /*#__PURE__*/React.createElement("tr", null, weekDates.map((dt, di) => /*#__PURE__*/React.createElement("th", {
+  }, d))), /*#__PURE__*/React.createElement("tr", null, wpGutter(sec, 3), weekDates.map((dt, di) => /*#__PURE__*/React.createElement("th", {
     key: dt,
     title: (isHol(di) ? holName(di) + " \u2014 " : "") + dt + " \u00b7 auto-filled; type to correct, clear to restore",
     style: { border: CELLBORDER, boxSizing: "border-box", background: isHol(di) ? "#f2ceef" : "#92d4ec", color: "#000", padding: 0, height: 18 }
@@ -13057,7 +13013,7 @@ function WpoaTab({ profile, notify }) {
     style: { width: "100%", boxSizing: "border-box", border: "none", outline: "none", background: "transparent", color: "#000", fontWeight: 800, fontSize: 11.5, textAlign: "center", fontFamily: "inherit", padding: 0 }
   })))), orderOf(sec).map((pid, pi) => [0, 1, 2].map(li => /*#__PURE__*/React.createElement("tr", {
     key: pid + "-" + li
-  }, li === 0 ? /*#__PURE__*/React.createElement("td", {
+  }, wpGutter(sec, 4 + pi * 3 + li), li === 0 ? /*#__PURE__*/React.createElement("td", {
     rowSpan: 3,
     style: { border: CELLBORDER, boxSizing: "border-box", background: "#fff", verticalAlign: "middle", padding: 0, position: "relative" }
   }, /*#__PURE__*/React.createElement("select", {
