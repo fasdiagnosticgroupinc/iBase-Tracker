@@ -587,6 +587,13 @@
     }
     @keyframes ibase-anim-spin    { from { opacity:0; transform: rotate(-90deg) scale(.7); } to { opacity:1; transform: none; } }
     @keyframes ibase-anim-elastic { 0% { opacity:0; transform: scale(.7,1.25); } 40% { opacity:1; transform: scale(1.12,.88); } 65% { transform: scale(.95,1.05); } 85% { transform: scale(1.03,.98); } 100% { transform: none; } }
+    /* v382: WOBBLE — jelly squash-and-stretch (icons, preview) + the sliding dock pill. */
+    .anim-wobble { animation: ibase-anim-wobble .75s ease-out; }
+    @keyframes ibase-anim-wobble { 0% { opacity:0; transform: scale(.6,1.25); } 28% { opacity:1; transform: scale(1.2,.8); } 46% { transform: scale(.88,1.12); } 62% { transform: scale(1.08,.93); } 78% { transform: scale(.97,1.03); } 90% { transform: scale(1.01,.99); } 100% { opacity:1; transform: none; } }
+    .ib-wob-pill { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; pointer-events: none; border-radius: 14px; transform-origin: 50% 50%;
+      background: color-mix(in srgb, var(--c-key) 22%, var(--c-bg2)); border: 1px solid color-mix(in srgb, var(--c-key) 50%, transparent);
+      box-shadow: 0 5px 16px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.14); }
+    body.ib-anim-tabs-wobble .ib-nav-active::after { display: none; }
     @keyframes ibase-anim-rise    { from { opacity:0; transform: translateY(22px); } to { opacity:1; transform: none; } }
     @keyframes ibase-anim-skew    { from { opacity:0; transform: skewX(-9deg) translateX(-14px); } 70% { transform: skewX(2.5deg); } to { opacity:1; transform: none; } }
     @keyframes ibase-anim-glow    { from { opacity:0; filter: brightness(2.1) saturate(1.5); } 55% { opacity:1; filter: brightness(1.35); } to { opacity:1; filter: none; } }
@@ -627,7 +634,7 @@
 (function () {
   var okLibs = (typeof firebase !== "undefined") && (typeof React !== "undefined") && (typeof ReactDOM !== "undefined") && (typeof XLSX !== "undefined");
   window.__IBASE_LIBS_OK = okLibs;
-  window.__IBASE_BUILD = "v381";
+  window.__IBASE_BUILD = "v382";
   if (!okLibs) {
     document.getElementById("root").innerHTML =
       "<div style='max-width:520px;margin:90px auto;padding:30px;background:#16181d;border:1px solid #f8717155;border-radius:16px;font-family:system-ui,sans-serif;color:#e5e7eb;text-align:center'>" +
@@ -3750,7 +3757,7 @@ function Login({
       letterSpacing: 2,
       textTransform: "uppercase"
     }
-  }, "version: v381"), /*#__PURE__*/React.createElement(React.Fragment, null,
+  }, "version: v382"), /*#__PURE__*/React.createElement(React.Fragment, null,
   /*#__PURE__*/React.createElement("label", {
     style: labelSt
   }, "Email"), /*#__PURE__*/React.createElement("input", {
@@ -12718,6 +12725,7 @@ function WpoaTab({ profile, notify }) {
   const wpRecentLoad = kind => { try { const v = JSON.parse(localStorage.getItem(wpRecentKey(kind)) || "[]"); return Array.isArray(v) ? v.filter(x => typeof x === "string").slice(0, 8) : []; } catch (e) { return []; } };
   const [recentColors, setRecentColors] = useState(() => wpRecentLoad("bg"));
   const [recentFonts, setRecentFonts] = useState(() => wpRecentLoad("fc"));
+  const [wpCopied, setWpCopied] = useState(""); // v382: week|cell of the last Ctrl+C (marching ants)
   useEffect(() => { try { localStorage.setItem(wpRecentKey("bg"), JSON.stringify(recentColors)); } catch (e) {} }, [recentColors]);
   useEffect(() => { try { localStorage.setItem(wpRecentKey("fc"), JSON.stringify(recentFonts)); } catch (e) {} }, [recentFonts]);
   // Debounced: dragging inside the colour picker fires many changes — only the colour you settle on is kept.
@@ -12984,9 +12992,22 @@ function WpoaTab({ profile, notify }) {
     return false;
   };
   const wpCellKey = (e, sec, pid, di, li) => {
+    if (e.key === "Escape" && wpCopied) { setWpCopied(""); e.preventDefault(); return; }
+    if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.nativeEvent && e.nativeEvent.isComposing) return;
+      e.preventDefault();
+      const rws = [];
+      orderOf(sec).forEach(p => [0, 1, 2].forEach(l => rws.push([p, l])));
+      const ix = rws.findIndex(r => r[0] === pid && r[1] === li);
+      const nx = e.shiftKey ? ix - 1 : ix + 1;
+      if (ix < 0 || nx < 0 || nx >= rws.length) { try { e.target.select(); } catch (e2) {} return; }
+      wpGo(sec, rws[nx][0], di, rws[nx][1]);
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) {
       if ((e.ctrlKey || e.metaKey) && String(e.key || "").toLowerCase() === "c" && e.target.selectionStart === e.target.selectionEnd) {
         const c = cellOf(sec, pid, di, li);
+        setWpCopied(week + "|" + sec + "_" + pid + "_" + di + "_" + li);
         IBASE_CLIP.wpoa = { t: c.t || "", bg: c.bg || "", fc: c.fc || "", al: c.al || "" };
         try { navigator.clipboard && navigator.clipboard.writeText(c.t || ""); } catch (e2) {}
       }
@@ -13006,8 +13027,9 @@ function WpoaTab({ profile, notify }) {
   };
   const wpCellCopy = (e, sec, pid, di, li) => {
     const el = e.target;
-    if (!wpFullSel(el)) { IBASE_CLIP.wpoa = null; return; }
+    if (!wpFullSel(el)) { IBASE_CLIP.wpoa = null; setWpCopied(""); return; }
     const c = cellOf(sec, pid, di, li);
+    setWpCopied(week + "|" + sec + "_" + pid + "_" + di + "_" + li);
     IBASE_CLIP.wpoa = { t: c.t || "", bg: c.bg || "", fc: c.fc || "", al: c.al || "" };
     IBASE_CLIP.v = c.t || "";
     try { e.clipboardData.setData("text/plain", c.t || ""); e.preventDefault(); } catch (e2) {}
@@ -13035,7 +13057,7 @@ function WpoaTab({ profile, notify }) {
     });
     return /*#__PURE__*/React.createElement("input", {
       value: c.t,
-      onChange: e => writeCell(sec, pid, di, li, { t: e.target.value }),
+      onChange: e => { if (wpCopied === week + "|" + pkey) setWpCopied(""); writeCell(sec, pid, di, li, { t: e.target.value }); },
       onFocus: () => setFocusCell({ sec: sec, pid: pid, di: di, li: li }),
       "data-wc": pkey,
       onKeyDown: e => wpCellKey(e, sec, pid, di, li),
@@ -13098,7 +13120,8 @@ function WpoaTab({ profile, notify }) {
     style: { position: "absolute", top: 1, right: 1, background: "none", border: "none", cursor: "pointer", fontSize: 9, color: "#a00" }
   }, "✕")) : null, weekDates.map((dt, di) => /*#__PURE__*/React.createElement("td", {
     key: di,
-    style: { border: CELLBORDER, boxSizing: "border-box", padding: 0, background: "#fff" }
+    className: wpCopied === week + "|" + sec + "_" + pid + "_" + di + "_" + li ? "ib-wp-copied" : undefined,
+    style: { border: CELLBORDER, boxSizing: "border-box", padding: 0, background: "#fff", position: "relative" }
   }, cellIn(sec, pid, di, li))))))));
   const alBtn = (al, sym, tt) => /*#__PURE__*/React.createElement("button", {
     title: tt,
@@ -13108,7 +13131,7 @@ function WpoaTab({ profile, notify }) {
   return /*#__PURE__*/React.createElement("div", { onKeyDownCapture: wpoaOnKeyDown }, /*#__PURE__*/React.createElement("div", {
  className: "ib-wpoa-sticky",
  style: { position: "sticky", top: stickTop, zIndex: 40, background: "var(--c-bg)", padding: "8px 0 2px", marginBottom: 10, boxShadow: "0 6px 14px rgba(0,0,0,.35)" }
- }, /*#__PURE__*/React.createElement("style", null, "body.ib-small .ib-wpoa-sticky{max-height:46vh;overflow-y:auto} body.ib-small .ib-wpoa-hint{display:none} .ib-wpoa-sheet input:focus,.ib-wpoa-sheet input:focus-visible,.ib-wpoa-sheet select:focus,.ib-wpoa-sheet select:focus-visible{outline:none !important;border-color:transparent !important} .ib-wpoa-sheet select,.ib-wpoa-sheet select option{color-scheme:light;background-color:#fff;color:#000}"), /*#__PURE__*/React.createElement("div", {
+ }, /*#__PURE__*/React.createElement("style", null, "body.ib-small .ib-wpoa-sticky{max-height:46vh;overflow-y:auto} body.ib-small .ib-wpoa-hint{display:none} .ib-wpoa-sheet input:focus,.ib-wpoa-sheet input:focus-visible,.ib-wpoa-sheet select:focus,.ib-wpoa-sheet select:focus-visible{outline:none !important;border-color:transparent !important} .ib-wpoa-sheet select,.ib-wpoa-sheet select option{color-scheme:light;background-color:#fff;color:#000} .ib-wp-copied::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:2;background:linear-gradient(90deg,#1a73e8 50%,transparent 0) repeat-x 0 0/8px 2px,linear-gradient(90deg,#1a73e8 50%,transparent 0) repeat-x 0 100%/8px 2px,linear-gradient(0deg,#1a73e8 50%,transparent 0) repeat-y 0 0/2px 8px,linear-gradient(0deg,#1a73e8 50%,transparent 0) repeat-y 100% 0/2px 8px;animation:ib-wp-ants .45s linear infinite} @keyframes ib-wp-ants{to{background-position:8px 0,-8px 100%,0 -8px,100% 8px}}"), /*#__PURE__*/React.createElement("div", {
  style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }
  }, PERIODS.map(p => /*#__PURE__*/React.createElement("button", {
     key: p.id,
@@ -19628,7 +19651,7 @@ function DangerZone({
     }
   }, "Inventory, spare parts and overtime land in the Bin as one restorable entry each. The audit trail is different: security rules make audit entries immutable, so deleting them is ", /*#__PURE__*/React.createElement("b", null, "permanent"), " — and the deletion itself is recorded as a fresh audit entry.")));
 }
-const TAB_ANIMS = [["default", "Default", "macOS-style Dock magnification on the tab bar (icons swell as the pointer approaches); colored highlight + slight zoom on content buttons, cards and table headers"], ["none", "None", "no animation at all"], ["bounce", "Bounce", "springs up with a playful overshoot"], ["bubble", "Bubble", "inflates softly like a bubble"], ["zoom", "Zoom", "zooms in and settles"], ["slide", "Slide", "glides in from the left"], ["fade", "Fade", "a clean, calm cross-fade"], ["flip", "Flip", "flips forward in 3-D"], ["drop", "Drop", "falls from above and lands with a bounce"], ["swing", "Swing", "swings in from the top corner"], ["blur", "Blur", "sharpens into focus"], ["wipe", "Wipe", "reveals left-to-right like a curtain"], ["spin", "Spin", "twists in with a quick quarter-turn"], ["elastic", "Elastic", "stretches like jelly and snaps into shape"], ["rise", "Rise", "rises smoothly from below"], ["skew", "Skew", "slants in and straightens up"], ["glow", "Glow", "fades in with a bright flash"], ["curtain", "Curtain", "unrolls from the top like a curtain"], ["sweep", "Sweep", "sweeps in with a diagonal wipe"], ["spiral", "Spiral", "spins inward and settles"], ["newspaper", "Newspaper", "whirls in like a spinning headline"], ["stretch", "Stretch", "expands out from a horizontal line"], ["glitch", "Glitch", "snaps in with a digital jitter"], ["fold", "Fold", "folds down like a sheet of paper"], ["iris", "Iris", "opens from the center like a camera iris"], ["shutter", "Shutter", "opens like horizontal shutters"], ["tumble", "Tumble", "tumbles in with a rolling spin"], ["pop", "Pop", "pops in with a snappy overshoot"], ["drift", "Drift", "drifts in gently from the corner"], ["wave", "Wave", "sways in and settles like a wave"]];
+const TAB_ANIMS = [["default", "Default", "macOS-style Dock magnification on the tab bar (icons swell as the pointer approaches); colored highlight + slight zoom on content buttons, cards and table headers"], ["none", "None", "no animation at all"], ["bounce", "Bounce", "springs up with a playful overshoot"], ["bubble", "Bubble", "inflates softly like a bubble"], ["zoom", "Zoom", "zooms in and settles"], ["slide", "Slide", "glides in from the left"], ["fade", "Fade", "a clean, calm cross-fade"], ["flip", "Flip", "flips forward in 3-D"], ["drop", "Drop", "falls from above and lands with a bounce"], ["swing", "Swing", "swings in from the top corner"], ["blur", "Blur", "sharpens into focus"], ["wipe", "Wipe", "reveals left-to-right like a curtain"], ["spin", "Spin", "twists in with a quick quarter-turn"], ["elastic", "Elastic", "stretches like jelly and snaps into shape"], ["wobble", "Wobble", "tab buttons: a jelly pill slides to the selected tab, stretches, squashes and wobbles into place · tab content: cards jelly in one after another, big numbers count up, bars and lines replay with a bounce, pies spin in"], ["rise", "Rise", "rises smoothly from below"], ["skew", "Skew", "slants in and straightens up"], ["glow", "Glow", "fades in with a bright flash"], ["curtain", "Curtain", "unrolls from the top like a curtain"], ["sweep", "Sweep", "sweeps in with a diagonal wipe"], ["spiral", "Spiral", "spins inward and settles"], ["newspaper", "Newspaper", "whirls in like a spinning headline"], ["stretch", "Stretch", "expands out from a horizontal line"], ["glitch", "Glitch", "snaps in with a digital jitter"], ["fold", "Fold", "folds down like a sheet of paper"], ["iris", "Iris", "opens from the center like a camera iris"], ["shutter", "Shutter", "opens like horizontal shutters"], ["tumble", "Tumble", "tumbles in with a rolling spin"], ["pop", "Pop", "pops in with a snappy overshoot"], ["drift", "Drift", "drifts in gently from the corner"], ["wave", "Wave", "sways in and settles like a wave"]];
 // "default" resolves to the system default style.
 // PER-USER: reads the local ui preference object — never the shared catalog.
 // PER-TARGET animations: the tab CONTENT and the tab BUTTONS each keep their
@@ -19650,6 +19673,164 @@ function tabAnimPrefs(ui) {
     }
   }
   return { content: c || "default", tabs: t || "default" };
+}
+function ibWobblePlace(prev, animate) {
+  try {
+    const rail = document.querySelector(".ib-siderail");
+    const pill = rail && rail.querySelector(".ib-wob-pill");
+    const btn = rail && rail.querySelector(".ib-nav-btn.ib-nav-active");
+    if (!pill) return null;
+    if (!btn) { pill.style.opacity = "0"; return null; }
+    const to = { l: btn.offsetLeft, t: btn.offsetTop, w: btn.offsetWidth, h: btn.offsetHeight };
+    Object.assign(pill.style, { left: to.l + "px", top: to.t + "px", width: to.w + "px", height: to.h + "px", opacity: "1" });
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!animate || !prev || reduce || !pill.animate || Math.abs(prev.l - to.l) < 1) return to;
+    const dir = to.l > prev.l ? 1 : -1, dist = Math.abs(to.l - prev.l), cx = to.l + to.w / 2;
+    // 1) stretch: the leading edge reaches the new tab while the tail is still near the old one
+    const sL = dir > 0 ? prev.l + dist * 0.3 : to.l;
+    const sR = dir > 0 ? to.l + to.w : prev.l + prev.w - dist * 0.3;
+    const at = (w, shift) => ({ left: (cx - w / 2 + shift) + "px", width: w + "px", top: to.t + "px", height: to.h + "px" });
+    const kf = [
+      { offset: 0, left: prev.l + "px", width: prev.w + "px", top: prev.t + "px", height: prev.h + "px", transform: "scale(1,1)", easing: "cubic-bezier(.45,0,.55,1)" },
+      { offset: 0.36, left: sL + "px", width: Math.max(sR - sL, to.w) + "px", top: to.t + "px", height: to.h + "px", transform: "scale(1,.78)", easing: "ease-out" },
+      // 2) squash on arrival, then wobble (overshoot in the direction of travel)
+      { offset: 0.54, ...at(to.w * 0.82, 4 * dir), transform: "scale(1,1.16)", easing: "ease-in-out" },
+      { offset: 0.7, ...at(to.w * 1.1, -2 * dir), transform: "scale(1,.9)", easing: "ease-in-out" },
+      { offset: 0.84, ...at(to.w * 0.96, 1 * dir), transform: "scale(1,1.05)", easing: "ease-in-out" },
+      { offset: 0.93, ...at(to.w * 1.02, 0), transform: "scale(1,.98)", easing: "ease-out" },
+      { offset: 1, left: to.l + "px", width: to.w + "px", top: to.t + "px", height: to.h + "px", transform: "scale(1,1)" }
+    ];
+    pill.getAnimations && pill.getAnimations().forEach(a => a.cancel());
+    pill.animate(kf, { duration: 760, easing: "linear" });
+    return to;
+  } catch (e) { return prev; }
+}
+// v382: WOBBLE content entrance — runs each time a tab is shown (keep-alive panes included).
+// Transform / opacity / filter only (Web Animations API), so the layout never moves; nothing is
+// left behind when it ends. Text values are only touched while counting and are restored exactly
+// (a React update during the count wins and stops it).
+function ibWobbleContent(pane) {
+  try {
+    if (!pane || !pane.animate || document.hidden) return 0;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return 0;
+    (pane.__ibWob || []).forEach(a => { try { a.cancel(); } catch (e) {} });
+    if (pane.__ibWobRaf) cancelAnimationFrame(pane.__ibWobRaf);
+    if (pane.__ibWobTxt) pane.__ibWobTxt.forEach(t => { if (t.n.nodeValue === t.last) t.n.nodeValue = t.orig; });
+    const anims = [];
+    pane.__ibWob = anims; pane.__ibWobTxt = null;
+    if (pane.querySelector(".ib-modal-card")) return 0; // an open dialog must never move
+    const vh = window.innerHeight || 800, vw = window.innerWidth || 1200;
+    const vis = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw ? r : null; };
+    const CARD = 'div[style*="var(--c-card)"], .ib-labcard';
+    let blocks = [];
+    for (const c of pane.querySelectorAll(CARD)) {
+      if (c.querySelector(CARD)) continue; // leaf cards only (stat tiles, chart cards, lab cards)
+      const r = vis(c);
+      if (r) { blocks.push({ el: c, r: r }); if (blocks.length >= 40) break; }
+      else if (blocks.length && c.getBoundingClientRect().top > vh + 40) break;
+    }
+    if (blocks.length < 2) { // no cards (e.g. WPOA): animate the pane's top-level sections
+      let root = pane;
+      while (root.children.length === 1 && root.firstElementChild) root = root.firstElementChild;
+      blocks = Array.from(root.children).map(el => ({ el: el, r: vis(el) })).filter(b => b.r).slice(0, 12);
+    }
+    blocks.sort((a, b) => Math.abs(a.r.top - b.r.top) > 8 ? a.r.top - b.r.top : a.r.left - b.r.left);
+    const txt = [];
+    blocks.forEach((b, i) => {
+      const d = Math.min(i * 55, 720), r = b.r, area = r.width * r.height;
+      const k = r.height > 500 ? 0.3 : r.height > 260 ? 0.6 : 1; // big tables wobble gently
+      const blur = area < 600000;
+      anims.push(b.el.animate([
+        { opacity: 0, transform: "translateY(" + Math.round(18 * k) + "px) scale(" + (1 - 0.08 * k) + "," + (1 + 0.08 * k) + ")", filter: blur ? "blur(6px)" : "none" },
+        { offset: 0.42, opacity: 1, transform: "translateY(" + (-2 * k) + "px) scale(" + (1 + 0.035 * k) + "," + (1 - 0.035 * k) + ")", filter: "blur(0px)" },
+        { offset: 0.62, transform: "translateY(0px) scale(" + (1 - 0.015 * k) + "," + (1 + 0.015 * k) + ")" },
+        { offset: 0.8, transform: "translateY(0px) scale(" + (1 + 0.007 * k) + "," + (1 - 0.007 * k) + ")" },
+        { opacity: 1, transform: "none", filter: "none" }
+      ], { duration: 720, delay: d, easing: "ease-out", fill: "backwards" }));
+      const el = b.el;
+      // charts: bars grow with an overshoot, lines draw, fills fade, other graphics (pies/gauges) spin in
+      let bi = 0;
+      el.querySelectorAll(".ib-anim-barrect").forEach(rc => {
+        if (bi > 160) return;
+        const n = parseFloat(rc.style.getPropertyValue("--bi")) || bi;
+        bi++;
+        anims.push(rc.animate([
+          { transform: "scaleY(0)" }, { offset: 0.55, transform: "scaleY(1.12)" }, { offset: 0.75, transform: "scaleY(.95)" },
+          { offset: 0.9, transform: "scaleY(1.02)" }, { transform: "scaleY(1)" }
+        ], { duration: 760, delay: d + 140 + n * 35, easing: "ease-out", fill: "backwards" }));
+      });
+      el.querySelectorAll(".ib-anim-linepath").forEach(p => anims.push(p.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: 850, delay: d + 160, easing: "ease-out", fill: "backwards" })));
+      el.querySelectorAll(".ib-anim-linefill").forEach(p => anims.push(p.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 650, delay: d + 380, easing: "ease", fill: "backwards" })));
+      el.querySelectorAll("svg").forEach(sv => {
+        if (sv.querySelector(".ib-anim-barrect, .ib-anim-linepath") || sv.closest(".ib-modal-card")) return;
+        const sr = sv.getBoundingClientRect();
+        if (sr.width < 60 || sr.height < 60) return; // icons stay still
+        anims.push(sv.animate([
+          { opacity: 0, transform: "rotate(-30deg) scale(.55)" }, { offset: 0.5, opacity: 1, transform: "rotate(4deg) scale(1.08)" },
+          { offset: 0.72, transform: "rotate(-2deg) scale(.96)" }, { offset: 0.88, transform: "rotate(.5deg) scale(1.015)" }, { opacity: 1, transform: "none" }
+        ], { duration: 820, delay: d + 120, easing: "ease-out", fill: "backwards" }));
+      });
+      // table rows ripple in
+      let ri = 0;
+      el.querySelectorAll("tbody tr").forEach(tr => {
+        if (ri >= 60) return;
+        const rr = tr.getBoundingClientRect();
+        if (!(rr.height > 0 && rr.bottom > 0 && rr.top < vh)) return;
+        anims.push(tr.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 380, delay: d + 90 + Math.min(ri, 16) * 28, easing: "ease-out", fill: "backwards" }));
+        ri++;
+      });
+      // big numbers count up
+      if (txt.length < 24) {
+        const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let n, seen = 0;
+        while ((n = w.nextNode()) && seen < 400 && txt.length < 24) {
+          seen++;
+          const raw = n.nodeValue, t = raw.trim();
+          if (!t || t.length > 14 || /[:\/]/.test(t)) continue;
+          const m = /^([^\d\-]{0,3})(-?\d[\d,]*(?:\.\d+)?)([^\d]{0,4})$/.exec(t);
+          if (!m) continue;
+          const p = n.parentElement;
+          if (!p || p.closest("input,textarea,select,button,svg")) continue;
+          const fs = parseFloat(getComputedStyle(p).fontSize) || 0;
+          if (fs < 18) continue;
+          const val = parseFloat(m[2].replace(/,/g, ""));
+          if (!isFinite(val) || val === 0) continue;
+          const dec = (m[2].split(".")[1] || "").length;
+          const lead = raw.slice(0, raw.indexOf(t)), trail = raw.slice(raw.indexOf(t) + t.length);
+          txt.push({ n: n, orig: raw, last: raw, val: val, dec: dec, com: m[2].indexOf(",") >= 0, pre: lead + m[1], suf: m[3] + trail, d: d + 80 });
+        }
+      }
+    });
+    if (txt.length) {
+      pane.__ibWobTxt = txt;
+      const fmt = (v, t) => { let s2 = v.toFixed(t.dec); if (t.com) { const ps = s2.split("."); ps[0] = ps[0].replace(/\B(?=(\d{3})+(?!\d))/g, ","); s2 = ps.join("."); } return t.pre + s2 + t.suf; };
+      const t0 = performance.now();
+      const step = now => {
+        let live = 0;
+        txt.forEach(t => {
+          if (t.done) return;
+          if (t.n.nodeValue !== t.last) { t.done = true; return; } // React updated it: its value wins
+          const q = Math.max(0, Math.min(1, (now - t0 - t.d) / 900));
+          if (q >= 1) { t.n.nodeValue = t.orig; t.last = t.orig; t.done = true; return; }
+          const e = 1 - Math.pow(1 - q, 3);
+          const v = fmt(t.val * e, t);
+          t.n.nodeValue = v; t.last = v; live++;
+        });
+        pane.__ibWobRaf = live ? requestAnimationFrame(step) : 0;
+        if (!live) pane.__ibWobTxt = null;
+      };
+      txt.forEach(t => { const v = fmt(0, t); t.n.nodeValue = v; t.last = v; });
+      pane.__ibWobRaf = requestAnimationFrame(step);
+    }
+    return anims.length + txt.length;
+  } catch (e) { return 0; }
+}
+function ibWobblePane() {
+  try {
+    const host = document.querySelector(".ibase-tab-panel");
+    if (!host) return null;
+    return Array.from(host.children).find(c => c.style.display !== "none" && c.getBoundingClientRect().height > 0) || null;
+  } catch (e) { return null; }
 }
 function tabAnimStyle(ui, target) {
   var p = tabAnimPrefs(ui);
@@ -22882,6 +23063,29 @@ function App() {
   useEffect(() => {
     if (TABS.length && !TABS.find(t => t.id === tab)) setTab(TABS[0].id);
   }, [TABS.map(t => t.id).join("|")]);
+  // v382: WOBBLE tab-button style — the dock pill follows the active tab with a jelly slide.
+  const wobPrev = React.useRef(null);
+  React.useLayoutEffect(() => {
+    if (tabAnimStyle(uiAnim, "tabs") !== "wobble") { wobPrev.current = null; return; }
+    wobPrev.current = ibWobblePlace(wobPrev.current, true);
+    const onR = () => { wobPrev.current = ibWobblePlace(wobPrev.current, false); };
+    window.addEventListener("resize", onR);
+    let ro = null;
+    try { const rail = document.querySelector(".ib-siderail"); if (rail && window.ResizeObserver) { ro = new ResizeObserver(onR); ro.observe(rail); } } catch (e) {}
+    return () => { window.removeEventListener("resize", onR); if (ro) ro.disconnect(); };
+  }, [tab, uiAnim, user, profile === undefined, TABS.map(t => t.id).join("|")]);
+  // v382: WOBBLE content — the shown tab's cards, numbers and charts jelly in (each time it is shown).
+  React.useLayoutEffect(() => {
+    if (tabAnimStyle(uiAnim, "content") !== "wobble") return;
+    let tries = 0, raf = 0;
+    const go = () => {
+      const pane = ibWobblePane();
+      if (pane && ibWobbleContent(pane) > 0) return;
+      if (++tries < 4) raf = requestAnimationFrame(go); // first visit: the tab may still be building
+    };
+    go();
+    return () => cancelAnimationFrame(raf);
+  }, [panelTab, user, profile === undefined]);
   if (user === undefined) return /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 40,
@@ -22943,7 +23147,10 @@ function App() {
       zIndex: 60,
       overflow: "visible"
     }
-  }, TABS.map(t => {
+  }, tabAnimStyle(uiAnim, "tabs") === "wobble" && /*#__PURE__*/React.createElement("span", {
+    className: "ib-wob-pill",
+    "aria-hidden": "true"
+  }), TABS.map(t => {
     const parts = t.label.split(" ");
     const icon = parts[0];
     const name = parts.slice(1).join(" ");
