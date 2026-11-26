@@ -634,7 +634,7 @@
 (function () {
   var okLibs = (typeof firebase !== "undefined") && (typeof React !== "undefined") && (typeof ReactDOM !== "undefined") && (typeof XLSX !== "undefined");
   window.__IBASE_LIBS_OK = okLibs;
-  window.__IBASE_BUILD = "v382";
+  window.__IBASE_BUILD = "v383";
   if (!okLibs) {
     document.getElementById("root").innerHTML =
       "<div style='max-width:520px;margin:90px auto;padding:30px;background:#16181d;border:1px solid #f8717155;border-radius:16px;font-family:system-ui,sans-serif;color:#e5e7eb;text-align:center'>" +
@@ -3757,7 +3757,7 @@ function Login({
       letterSpacing: 2,
       textTransform: "uppercase"
     }
-  }, "version: v382"), /*#__PURE__*/React.createElement(React.Fragment, null,
+  }, "version: v383"), /*#__PURE__*/React.createElement(React.Fragment, null,
   /*#__PURE__*/React.createElement("label", {
     style: labelSt
   }, "Email"), /*#__PURE__*/React.createElement("input", {
@@ -12726,6 +12726,13 @@ function WpoaTab({ profile, notify }) {
   const [recentColors, setRecentColors] = useState(() => wpRecentLoad("bg"));
   const [recentFonts, setRecentFonts] = useState(() => wpRecentLoad("fc"));
   const [wpCopied, setWpCopied] = useState(""); // v382: week|cell of the last Ctrl+C (marching ants)
+  // v383: Esc removes the copy border wherever the focus is (toolbar, name list, blank page…).
+  useEffect(() => {
+    if (!wpCopied) return;
+    const h = ev => { if (ev.key === "Escape") setWpCopied(""); };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [wpCopied]);
   useEffect(() => { try { localStorage.setItem(wpRecentKey("bg"), JSON.stringify(recentColors)); } catch (e) {} }, [recentColors]);
   useEffect(() => { try { localStorage.setItem(wpRecentKey("fc"), JSON.stringify(recentFonts)); } catch (e) {} }, [recentFonts]);
   // Debounced: dragging inside the colour picker fires many changes — only the colour you settle on is kept.
@@ -13405,6 +13412,7 @@ function SmerTab({ profile, labs, notify }) {
   const logoW = Math.max(40, Math.min(260, Number(brandDoc && brandDoc.logoW) || 84));
   const emptyRow = () => ({ date: "", travel: "", kmFrom: "", kmTo: "", totalKm: "", instrument: "", isr: "", dcr: "", meals: "", parking: "" });
   const [rowFocus, setRowFocus] = useState(-1);
+  const [smCopied, setSmCopied] = useState(""); // v383: "row|col" of the last Ctrl+C (moving border)
   const blank = () => ({ periodId: "", gasS: "", name: profile && profile.name || "", position: "Field Service Engineer", rows: Array.from({ length: 12 }, emptyRow), parkingS: "", tollS: "", loadS: "", empSig: "", totKmS: "", totMealsS: "", totParkS: "" });
   const SMER_DEF_W = ["9%", "18%", "8%", "8%", "8%", "17%", "8%", "11%", "6%", "7%"];
   const [colW, setColW] = useState(() => { try { return JSON.parse(localStorage.getItem("ibase_smer_colw") || "{}"); } catch (e) { return {}; } });
@@ -13629,6 +13637,20 @@ function SmerTab({ profile, labs, notify }) {
   const [f, setF] = useState(blank);
   const smerHist = useHistory(() => f, snap => setF(snap));
   const smerOnFocusCapture = () => smerHist.record();
+  // v383: the copy border goes away with Esc (from anywhere), or once the copied cell is edited /
+  // the rows shift (insert, delete, refresh) so it never sits on the wrong cell.
+  useEffect(() => {
+    if (!smCopied) return;
+    const h = ev => { if (ev.key === "Escape") setSmCopied(""); };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [smCopied]);
+  useEffect(() => {
+    if (!smCopied) return;
+    const ps = smCopied.split("|"), clip = IBASE_CLIP.smer;
+    const cur = (f.rows[+ps[0]] || {})[ps[1]];
+    if (!clip || clip.id !== smCopied || clip.n !== f.rows.length || String(cur == null ? "" : cur) !== clip.t) setSmCopied("");
+  }, [f.rows, smCopied]);
   const smerOnKeyDown = e => {
     smerHist.onKeyDown(e);
     if (e.defaultPrevented) return;
@@ -13639,7 +13661,7 @@ function SmerTab({ profile, labs, notify }) {
     if (!isCell) return;
     const noSel = el.selectionStart === el.selectionEnd;
     const key = (e.key || "").toLowerCase();
-    if (key === "c" && noSel) { IBASE_CLIP.v = el.value; }
+    if (key === "c" && noSel) { IBASE_CLIP.v = el.value; if (smMark(el)) { try { navigator.clipboard && navigator.clipboard.writeText(IBASE_CLIP.smer.t); } catch (e2) {} } }
   };
   // Auto-fill the Name once, from the signed-in user, when the sheet has no name yet.
   // It stays fully editable — the user can overwrite or clear it.
@@ -13671,6 +13693,41 @@ function SmerTab({ profile, labs, notify }) {
     }
     return { ...x, rows };
   });
+  // v383: Sheets-style whole-cell copy / paste (same behaviour as WPOA).
+  //  · Copy with nothing (or everything) selected copies the WHOLE cell — a formula is copied as
+  //    typed — and draws a moving blue border on it. A partial selection copies only that text.
+  //  · Pasting that copy into another cell replaces the cell's content (one undo step); text from
+  //    anywhere else (or a WPOA copy) pastes normally / as whole-cell text.
+  const smCell = el => (el && el.getAttribute && el.getAttribute("data-smc")) || "";
+  const smFull = el => el.selectionStart === el.selectionEnd || (el.selectionStart === 0 && el.selectionEnd === el.value.length);
+  const smMark = el => {
+    const id = smCell(el);
+    if (!id) return false;
+    const ps = id.split("|"), v0 = (f.rows[+ps[0]] || {})[ps[1]];
+    IBASE_CLIP.smer = { t: String(v0 == null ? "" : v0), id: id, n: f.rows.length };
+    IBASE_CLIP.v = IBASE_CLIP.smer.t;
+    setSmCopied(id);
+    return true;
+  };
+  const smerCopy = e => {
+    const el = e.target;
+    if (!smCell(el)) return;
+    if (!smFull(el)) { IBASE_CLIP.smer = null; setSmCopied(""); return; }
+    if (!smMark(el)) return;
+    try { e.clipboardData.setData("text/plain", IBASE_CLIP.smer.t); e.preventDefault(); } catch (e2) {}
+  };
+  const smerPaste = e => {
+    const id = smCell(e.target);
+    if (!id) return;
+    let txt = null;
+    try { txt = e.clipboardData.getData("text/plain"); } catch (e2) {}
+    const clip = [IBASE_CLIP.smer, IBASE_CLIP.wpoa].find(c => c && txt !== null && txt === c.t);
+    if (!clip) return; // something else was copied since → normal text paste
+    e.preventDefault();
+    const ps = id.split("|");
+    smerHist.record(); // the paste is its own undo step
+    setRow(+ps[0], ps[1], clip.t);
+  };
   const delRow = i => {
     if (f.rows.length <= 1) { notify("At least one row must remain.", "error"); return; }
     const r2 = f.rows[i];
@@ -13880,7 +13937,7 @@ function SmerTab({ profile, labs, notify }) {
   const bTd = extra => ({ border: "1px solid #000", padding: 0, height: 21, ...(extra || {}) });
   const yl = { background: "#ffff00", color: "#000" };
   const models = (window.__ibaseCatalog && window.__ibaseCatalog.machines || []).map(x => x.model).filter(Boolean);
-  return /*#__PURE__*/React.createElement("div", { onKeyDownCapture: smerOnKeyDown, onFocusCapture: smerOnFocusCapture }, /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement("div", { onKeyDownCapture: smerOnKeyDown, onFocusCapture: smerOnFocusCapture, onCopyCapture: smerCopy, onPasteCapture: smerPaste }, /*#__PURE__*/React.createElement("style", null, "td:has(> input.ib-sm-copied){position:relative} td:has(> input.ib-sm-copied)::after{content:\"\";position:absolute;inset:0;pointer-events:none;z-index:2;background:linear-gradient(90deg,#1a73e8 50%,transparent 0) repeat-x 0 0/8px 2px,linear-gradient(90deg,#1a73e8 50%,transparent 0) repeat-x 0 100%/8px 2px,linear-gradient(0deg,#1a73e8 50%,transparent 0) repeat-y 0 0/2px 8px,linear-gradient(0deg,#1a73e8 50%,transparent 0) repeat-y 100% 0/2px 8px;animation:ib-sm-ants .45s linear infinite} @keyframes ib-sm-ants{to{background-position:8px 0,-8px 100%,0 -8px,100% 8px}}"), /*#__PURE__*/React.createElement("div", {
     style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }
   }, /*#__PURE__*/React.createElement("select", {
     style: { ...inputSt(), maxWidth: 300 },
@@ -14031,7 +14088,7 @@ function SmerTab({ profile, labs, notify }) {
     key: i
   }, /*#__PURE__*/React.createElement("td", {
     style: bTd({ textAlign: "center", fontSize: 9.5, color: "var(--c-text5)", fontFamily: "monospace", padding: 0 })
-  }, i + 1), /*#__PURE__*/React.createElement("td", { style: { ...bTd(), position: "relative" } }, /*#__PURE__*/React.createElement("input", { style: paperIn({ paddingRight: 12, textAlign: alignOf("date") }), value: rowFocus === i && colFocus === "date" ? r.date : smerShow(i, "date"), onFocus: () => { setRowFocus(i); setColFocus("date"); }, onChange: e => setRow(i, "date", e.target.value), placeholder: "" }), /*#__PURE__*/React.createElement("button", { title: "Delete this row", onClick: () => delRow(i), style: { position: "absolute", top: 0, right: 0, background: "none", border: "none", cursor: "pointer", fontSize: 9, color: "#a00", lineHeight: "14px", padding: "0 2px" } }, "✕")), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("travel") }), value: rowFocus === i && colFocus === "travel" ? r.travel : smerShow(i, "travel"), onFocus: () => { setRowFocus(i); setColFocus("travel"); }, onChange: e => setRow(i, "travel", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("kmFrom") }), value: rowFocus === i && colFocus === "kmFrom" ? r.kmFrom : smerShow(i, "kmFrom"), onFocus: () => { setRowFocus(i); setColFocus("kmFrom"); }, onChange: e => setRow(i, "kmFrom", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("kmTo") }), value: rowFocus === i && colFocus === "kmTo" ? r.kmTo : smerShow(i, "kmTo"), onFocus: () => { setRowFocus(i); setColFocus("kmTo"); }, onChange: e => setRow(i, "kmTo", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { title: "Auto-computes To − From when both are numbers; you can also type a fare directly", style: paperIn({ textAlign: alignOf("totalKm") }), value: rowFocus === i && colFocus === "totalKm" ? r.totalKm : smerShow(i, "totalKm"), onFocus: () => { setRowFocus(i); setColFocus("totalKm"); }, onChange: e => setRow(i, "totalKm", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("instrument") }), list: "smer-models", value: rowFocus === i && colFocus === "instrument" ? r.instrument : smerShow(i, "instrument"), onFocus: () => { setRowFocus(i); setColFocus("instrument"); }, onChange: e => setRow(i, "instrument", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("isr") }), value: rowFocus === i && colFocus === "isr" ? r.isr : smerShow(i, "isr"), onFocus: () => { setRowFocus(i); setColFocus("isr"); }, onChange: e => setRow(i, "isr", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("dcr") }), value: rowFocus === i && colFocus === "dcr" ? r.dcr : smerShow(i, "dcr"), onFocus: () => { setRowFocus(i); setColFocus("dcr"); }, onChange: e => setRow(i, "dcr", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("meals") }), value: rowFocus === i && colFocus === "meals" ? r.meals : smerShow(i, "meals"), onFocus: () => { setRowFocus(i); setColFocus("meals"); }, onChange: e => setRow(i, "meals", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("parking") }), value: rowFocus === i && colFocus === "parking" ? r.parking : smerShow(i, "parking"), onFocus: () => { setRowFocus(i); setColFocus("parking"); }, onChange: e => setRow(i, "parking", e.target.value) })))), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd({ textAlign: "center", fontWeight: 800, fontSize: 11.5 }) }, "TOTAL:"), /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd() }, totCellInput("km", "totKmS", tKm, effKm)), /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd() }, totCellInput("meals", "totMealsS", tMeals, effMeals)), /*#__PURE__*/React.createElement("td", { style: bTd() }, totCellInput("park", "totParkS", tPark, effPark))))), /*#__PURE__*/React.createElement("datalist", { id: "smer-models" }, models.map((m2, i2) => /*#__PURE__*/React.createElement("option", { key: m2 + i2, value: m2 }))), /*#__PURE__*/React.createElement("div", {
+  }, i + 1), /*#__PURE__*/React.createElement("td", { style: { ...bTd(), position: "relative" } }, /*#__PURE__*/React.createElement("input", { style: paperIn({ paddingRight: 12, textAlign: alignOf("date") }), value: rowFocus === i && colFocus === "date" ? r.date : smerShow(i, "date"), "data-smc": i + "|date", className: smCopied === i + "|date" ? "ib-sm-copied" : undefined, onFocus: () => { setRowFocus(i); setColFocus("date"); }, onChange: e => setRow(i, "date", e.target.value), placeholder: "" }), /*#__PURE__*/React.createElement("button", { title: "Delete this row", onClick: () => delRow(i), style: { position: "absolute", top: 0, right: 0, background: "none", border: "none", cursor: "pointer", fontSize: 9, color: "#a00", lineHeight: "14px", padding: "0 2px" } }, "✕")), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("travel") }), value: rowFocus === i && colFocus === "travel" ? r.travel : smerShow(i, "travel"), "data-smc": i + "|travel", className: smCopied === i + "|travel" ? "ib-sm-copied" : undefined, onFocus: () => { setRowFocus(i); setColFocus("travel"); }, onChange: e => setRow(i, "travel", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("kmFrom") }), value: rowFocus === i && colFocus === "kmFrom" ? r.kmFrom : smerShow(i, "kmFrom"), "data-smc": i + "|kmFrom", className: smCopied === i + "|kmFrom" ? "ib-sm-copied" : undefined, onFocus: () => { setRowFocus(i); setColFocus("kmFrom"); }, onChange: e => setRow(i, "kmFrom", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("kmTo") }), value: rowFocus === i && colFocus === "kmTo" ? r.kmTo : smerShow(i, "kmTo"), "data-smc": i + "|kmTo", className: smCopied === i + "|kmTo" ? "ib-sm-copied" : undefined, onFocus: () => { setRowFocus(i); setColFocus("kmTo"); }, onChange: e => setRow(i, "kmTo", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { title: "Auto-computes To − From when both are numbers; you can also type a fare directly", style: paperIn({ textAlign: alignOf("totalKm") }), value: rowFocus === i && colFocus === "totalKm" ? r.totalKm : smerShow(i, "totalKm"), "data-smc": i + "|totalKm", className: smCopied === i + "|totalKm" ? "ib-sm-copied" : undefined, onFocus: () => { setRowFocus(i); setColFocus("totalKm"); }, onChange: e => setRow(i, "totalKm", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("instrument") }), list: "smer-models", value: rowFocus === i && colFocus === "instrument" ? r.instrument : smerShow(i, "instrument"), "data-smc": i + "|instrument", className: smCopied === i + "|instrument" ? "ib-sm-copied" : undefined, onFocus: () => { setRowFocus(i); setColFocus("instrument"); }, onChange: e => setRow(i, "instrument", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("isr") }), value: rowFocus === i && colFocus === "isr" ? r.isr : smerShow(i, "isr"), "data-smc": i + "|isr", className: smCopied === i + "|isr" ? "ib-sm-copied" : undefined, onFocus: () => { setRowFocus(i); setColFocus("isr"); }, onChange: e => setRow(i, "isr", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("dcr") }), value: rowFocus === i && colFocus === "dcr" ? r.dcr : smerShow(i, "dcr"), "data-smc": i + "|dcr", className: smCopied === i + "|dcr" ? "ib-sm-copied" : undefined, onFocus: () => { setRowFocus(i); setColFocus("dcr"); }, onChange: e => setRow(i, "dcr", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("meals") }), value: rowFocus === i && colFocus === "meals" ? r.meals : smerShow(i, "meals"), "data-smc": i + "|meals", className: smCopied === i + "|meals" ? "ib-sm-copied" : undefined, onFocus: () => { setRowFocus(i); setColFocus("meals"); }, onChange: e => setRow(i, "meals", e.target.value) })), /*#__PURE__*/React.createElement("td", { style: bTd() }, /*#__PURE__*/React.createElement("input", { style: paperIn({ textAlign: alignOf("parking") }), value: rowFocus === i && colFocus === "parking" ? r.parking : smerShow(i, "parking"), "data-smc": i + "|parking", className: smCopied === i + "|parking" ? "ib-sm-copied" : undefined, onFocus: () => { setRowFocus(i); setColFocus("parking"); }, onChange: e => setRow(i, "parking", e.target.value) })))), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd({ textAlign: "center", fontWeight: 800, fontSize: 11.5 }) }, "TOTAL:"), /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd() }, totCellInput("km", "totKmS", tKm, effKm)), /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd() }), /*#__PURE__*/React.createElement("td", { style: bTd() }, totCellInput("meals", "totMealsS", tMeals, effMeals)), /*#__PURE__*/React.createElement("td", { style: bTd() }, totCellInput("park", "totParkS", tPark, effPark))))), /*#__PURE__*/React.createElement("datalist", { id: "smer-models" }, models.map((m2, i2) => /*#__PURE__*/React.createElement("option", { key: m2 + i2, value: m2 }))), /*#__PURE__*/React.createElement("div", {
     style: { display: "flex", justifyContent: "space-between", marginTop: 14, flexWrap: "wrap", gap: 20 }
   }, /*#__PURE__*/React.createElement("div", {
     style: { fontSize: 12, width: 300 }
